@@ -3,7 +3,7 @@
 # Reworked into standard Huffman coding with binary file input/output.
 
 class Node:
-    def __init__(self, symbol=None, frequency=None):
+    def __init__(self, symbol=None):
         self.symbol = symbol
         self.left = None
         self.right = None
@@ -26,7 +26,7 @@ def deserialize_tree(data):
         node.right, position = read_node(position)
         return node, position
 
-    root, position = read_node(0)
+    root, _ = read_node(0)
     return root
 
 

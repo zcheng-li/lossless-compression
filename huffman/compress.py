@@ -4,7 +4,6 @@
 
 import os
 
-
 class Node:
     def __init__(self, symbol=None, frequency=None):
         self.symbol = symbol
