@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Configuration: relative method paths are resolved next to this script.
-method_dir="LZW"
+method_dir="huffman"
 python_cmd="python3.12"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)

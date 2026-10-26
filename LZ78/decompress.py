@@ -6,11 +6,7 @@
 def LZ78_decompress(input: list[tuple[int, bytes]]) -> bytes:
     tree = [b""]
     output = []
-    for position, (index, symbol) in enumerate(input):
-        if not 0 <= index < len(tree) or len(symbol) > 1:
-            raise ValueError("Invalid LZ78 pair")
-        if not symbol and (position != len(input) - 1 or index == 0):
-            raise ValueError("An index-only phrase is allowed only at the end")
+    for index, symbol in input:
         entry = tree[index] + symbol
         output.append(entry)
         if symbol:
@@ -18,16 +14,12 @@ def LZ78_decompress(input: list[tuple[int, bytes]]) -> bytes:
     return b"".join(output)
 
 
-def decompress_file(source="./LZ78/compressed", destination="./LZ78/out.txt"):
+def decompress_file(source="compressed", destination="out.txt"):
     with open(source, "rb") as fin:
         header = fin.read(5)
         payload = fin.read()
-    if len(header) != 5 or header[:4] != b"LZ78" or header[4] == 0:
-        raise ValueError("Missing or invalid LZ78 header")
     width = header[4]
     pair_size = width + 1
-    if len(payload) % pair_size not in (0, width):
-        raise ValueError("Truncated LZ78 index")
     pairs = [(int.from_bytes(payload[i:i + width], "little"),
               payload[i + width:i + pair_size])
              for i in range(0, len(payload), pair_size)]
