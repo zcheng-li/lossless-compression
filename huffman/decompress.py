@@ -60,5 +60,4 @@ def decompress_file(source="compressed", destination="out.txt"):
         fout.write(output)
 
 
-if __name__ == "__main__":
-    decompress_file()
+decompress_file()

@@ -33,6 +33,5 @@ def decompress_file(source="compressed", destination="out.txt"):
         fout.write(LZW_decompress(codes))
 
 
-if __name__ == "__main__":
-    decompress_file()
+decompress_file()
    
