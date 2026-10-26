@@ -46,12 +46,46 @@ def generate_huffman_codes(node, code="", huffman_codes=None):
     return huffman_codes
 
 def serialize_tree(node):
-    # Preorder format: 0 = internal node; 1 followed by a byte = leaf.
     if node is None:
         return b""
-    if node.symbol is not None:
-        return bytes([1, len(node.symbol)]) + node.symbol
-    return b"\x00" + serialize_tree(node.left) + serialize_tree(node.right)
+
+    def max_symbol_size(current):
+        if current.symbol is not None:
+            return len(current.symbol)
+        return max(max_symbol_size(current.left), max_symbol_size(current.right))
+
+    # One header byte gives the bit width of (symbol length - 1).
+    # For one- or two-byte symbols, the length field needs only one bit.
+    length_bits = max(1, (max_symbol_size(node) - 1).bit_length())
+    tree_data = bytearray([length_bits])
+    buffer = 0
+    bits = 0
+
+    def write_bits(value, width):
+        nonlocal buffer, bits
+        buffer = (buffer << width) | value
+        bits += width
+        while bits >= 8:
+            bits -= 8
+            tree_data.append(buffer >> bits)
+            buffer &= (1 << bits) - 1
+
+    def write_node(current):
+        # Preorder: 0 = internal; 1 + length field + symbol bits = leaf.
+        if current.symbol is not None:
+            write_bits(1, 1)
+            write_bits(len(current.symbol) - 1, length_bits)
+            for byte in current.symbol:
+                write_bits(byte, 8)
+        else:
+            write_bits(0, 1)
+            write_node(current.left)
+            write_node(current.right)
+
+    write_node(node)
+    if bits:
+        tree_data.append(buffer << (8 - bits))
+    return bytes(tree_data)
 
 
 def compress_file(source="austen.txt", destination="./huffman/compressed", n_bytes=2):
@@ -86,7 +120,7 @@ def compress_file(source="austen.txt", destination="./huffman/compressed", n_byt
     # tree byte count (2, little-endian), then the tree and packed payload.
     # The original count tells the decoder when to stop before padding bits.
     with open(destination, "wb") as fout:
-        fout.write(b"HUF2")
+        fout.write(b"HUF3")
         fout.write(len(data).to_bytes(8, "little"))
         fout.write(len(tree_data).to_bytes(2, "little"))
         fout.write(tree_data)

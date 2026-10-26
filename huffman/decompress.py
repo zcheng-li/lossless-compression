@@ -13,21 +13,29 @@ def deserialize_tree(data):
     if not data:
         return None
 
-    def read_node(position):
-        marker = data[position]
-        position += 1
-        if marker == 1:
-            size = data[position]
-            position += 1
-            symbol = data[position:position + size]
-            return Node(symbol=symbol), position + size
-        node = Node()
-        node.left, position = read_node(position)
-        node.right, position = read_node(position)
-        return node, position
+    length_bits = data[0]
+    position = 8
 
-    root, _ = read_node(0)
-    return root
+    def read_bits(width):
+        nonlocal position
+        value = 0
+        for _ in range(width):
+            byte = data[position // 8]
+            value = (value << 1) | ((byte >> (7 - position % 8)) & 1)
+            position += 1
+        return value
+
+    def read_node():
+        if read_bits(1):
+            size = read_bits(length_bits) + 1
+            symbol = bytes(read_bits(8) for _ in range(size))
+            return Node(symbol=symbol)
+        node = Node()
+        node.left = read_node()
+        node.right = read_node()
+        return node
+
+    return read_node()
 
 
 def decompress_file(source="compressed", destination="out.txt"):
