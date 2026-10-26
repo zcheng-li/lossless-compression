@@ -55,7 +55,7 @@ def serialize_tree(node):
     return b"\x00" + serialize_tree(node.left) + serialize_tree(node.right)
 
 
-def compress_file(source="austen.txt", destination="./huffman/compressed_huffman", n_bytes=2):
+def compress_file(source="austen.txt", destination="./huffman/compressed", n_bytes=2):
     with open(source, "rb") as fin:
         data = fin.read()
     frequencies = {}
@@ -97,5 +97,5 @@ def compress_file(source="austen.txt", destination="./huffman/compressed_huffman
 
 if __name__ == "__main__":
     compress_file()
-    print("Compression complete. Output written to ./huffman/compressed_huffman")
-    print("The compressed size is", os.path.getsize("./huffman/compressed_huffman") / (1024 * 1024), "MB.")
+    print("Compression complete. Output written to ./huffman/compressed")
+    print("The compressed size is", os.path.getsize("./huffman/compressed") / (1024 * 1024), "MB.")
