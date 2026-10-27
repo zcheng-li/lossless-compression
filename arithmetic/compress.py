@@ -97,7 +97,7 @@ def arithmetic_compress(data: bytes) -> bytes:
     return bytes(output)
 
 
-def compress_file(source="austen.txt", destination="./arithmatic/compressed"):
+def compress_file(source="austen.txt", destination="./arithmetic/compressed"):
     with open(source, "rb") as fin:
         compressed = arithmetic_compress(fin.read())
     with open(destination, "wb") as fout:
@@ -106,5 +106,5 @@ def compress_file(source="austen.txt", destination="./arithmatic/compressed"):
 
 if __name__ == "__main__":
     compress_file()
-    print("Compression complete. Output written to ./arithmatic/compressed")
-    print("size of compressed file:", os.path.getsize("./arithmatic/compressed") / (1024 * 1024), "MB")
+    print("Compression complete. Output written to ./arithmetic/compressed")
+    print("size of compressed file:", os.path.getsize("./arithmetic/compressed") / (1024 * 1024), "MB")

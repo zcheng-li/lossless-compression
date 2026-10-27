@@ -14,17 +14,11 @@ MASK = FULL_RANGE - 1
 def arithmetic_decompress(data: bytes) -> bytes:
     symbol_count = struct.unpack_from("<H", data, 4)[0]
     payload_start = 6 + 9 * symbol_count
-    if symbol_count > 256 or len(data) < payload_start:
-        raise ValueError("Invalid or incomplete frequency table")
 
     frequencies = [0] * 256
-    previous_symbol = -1
     for position in range(6, payload_start, 9):
         symbol, frequency = struct.unpack_from("<BQ", data, position)
-        if symbol <= previous_symbol or frequency == 0:
-            raise ValueError("Invalid frequency table entry")
         frequencies[symbol] = frequency
-        previous_symbol = symbol
 
     cumulative = [0]
     for frequency in frequencies:
