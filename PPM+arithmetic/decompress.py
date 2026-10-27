@@ -2,7 +2,6 @@
 
 import struct
 
-
 STATE_BITS = 64
 FULL_RANGE = 1 << STATE_BITS
 HALF = FULL_RANGE >> 1
@@ -10,7 +9,6 @@ QUARTER = HALF >> 1
 MASK = FULL_RANGE - 1
 MAX_ORDER = 4
 ESCAPE = 256
-
 
 class PPMModel:
     def __init__(self, max_order=MAX_ORDER):
@@ -47,7 +45,7 @@ class PPMModel:
             self.history = (self.history + bytes([symbol]))[-self.max_order:]
 
 
-def arithmetic_decompress(data: bytes) -> bytes:
+def arithmetic_decompress(data):
     max_order, original_size = struct.unpack_from("<BQ", data, 4)
     if original_size == 0:
         return b""
@@ -120,5 +118,4 @@ def decompress_file(source="compressed", destination="out.txt"):
         fout.write(decompressed)
 
 
-if __name__ == "__main__":
-    decompress_file()
+decompress_file()

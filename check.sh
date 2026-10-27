@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Configuration: relative method paths are resolved next to this script.
-method_dir="PPM+arithmetic"
+# Pass a method directory as the first argument, or use the default below.
+# Relative method paths are resolved next to this script.
+method_dir="${1:-PPM+arithmetic}"
 python_cmd="python3.12"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -20,6 +21,8 @@ fi
 # Each method directory uses the same filenames.
 # The standalone decoder must read ./compressed and write ./out.txt.
 decoder="$method_dir/decompress.py"
+minified_decoder="$method_dir/decompress.min.py"
+pyc_file="$method_dir/decompress.min.pyc"
 compressed="$method_dir/compressed"
 
 for file in "$decoder" "$compressed" "$original"; do
@@ -35,18 +38,24 @@ python_cmd=$("$python_cmd" -c 'import sys; print(sys.executable)')
 echo "Decoder: $decoder"
 echo "Compressed file: $compressed"
 
+# Keep the original source, minified source, and its bytecode together.
+uv tool run --python "$python_cmd" --from python-minifier pyminify \
+    "$decoder" --rename-globals --remove-literal-statements \
+    --prefer-single-line --output "$minified_decoder"
+"$python_cmd" -c \
+    'import py_compile, sys; py_compile.compile(sys.argv[1], cfile=sys.argv[2], dfile="decompress.py", doraise=True, optimize=0)' \
+    "$minified_decoder" "$pyc_file"
+echo "Minified decoder: $minified_decoder"
+echo "Decoder bytecode: $pyc_file"
+
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/lossless-check.XXXXXXXX")
 trap 'rm -rf -- "$work_dir"' EXIT
-cp -- "$decoder" "$work_dir/decompress.py"
+cp -- "$pyc_file" "$work_dir/decompress.pyc"
 cp -- "$compressed" "$work_dir/compressed"
 
-# Compile the exact standalone decoder being checked, not the encoder.
-pyc_file=$("$python_cmd" -c \
-    'import py_compile, sys; print(py_compile.compile(sys.argv[1], dfile="decompress.py", doraise=True, optimize=0))' \
-    "$work_dir/decompress.py")
-
+# Time and verify the exact bytecode included in the size calculation.
 # POSIX time -p works on both macOS and Linux. Only decoding is timed.
-if ! (cd -- "$work_dir" && LC_ALL=C /usr/bin/time -p "$python_cmd" decompress.py) \
+if ! (cd -- "$work_dir" && LC_ALL=C /usr/bin/time -p "$python_cmd" decompress.pyc) \
         2>"$work_dir/time.txt"; then
     cat "$work_dir/time.txt" >&2
     echo "Decompression failed" >&2
