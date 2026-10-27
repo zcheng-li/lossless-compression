@@ -13,47 +13,119 @@ FULL_RANGE = 1 << STATE_BITS
 HALF = FULL_RANGE >> 1
 QUARTER = HALF >> 1
 MASK = FULL_RANGE - 1
-MAX_ORDER = 4
+MAX_ORDER = 5
 ESCAPE = 256
+
+# 1 for 1160163 bytes
+# 2 for 918159 bytes
+# 4 for 651221 bytes
+# 5 for 629261 bytes    (629261 + 5292) / 2664245 = 23.8174%
+# 6 for 632156 bytes
+# 8 for 656188 bytes
+# 16 for 697202 bytes
 
 
 class PPMModel:
     def __init__(self, max_order=MAX_ORDER):
         self.max_order = max_order
+
+        # Recently processed bytes used as n_order_context to predict the next byte.
         self.history = b""
+
+        # Each n_order_context maps to a frequency table. For example:
+        # self.contexts[b"ab"] = {ord("c"): 3, ord("d"): 1}
+        # After n_order_context ab, c has appeared 3 times and d has appeared once.
         self.contexts = {}
 
     def distributions(self):
-        # Start with the longest context, shortening it after each ESCAPE.
-        excluded = set()
-        for order in range(len(self.history), -1, -1):
-            context = self.history[-order:] if order else b""
-            counts = self.contexts.get(context, {})
-            frequencies = [(symbol, count) for symbol, count in sorted(counts.items())
-                           if symbol not in excluded]
-            if not frequencies:
-                continue
-            # Method C: ESCAPE gets one count per distinct context symbol.
-            # Exclusion removes higher-order symbols from the lower model.
-            frequencies.append((ESCAPE, len(counts)))
-            yield frequencies
-            excluded.update(counts)
+        # Bytes ruled out by longer contexts are excluded from shorter ones.
+        excluded_symbols = set()
+        longest_order = len(self.history)
 
-        # Order -1: all remaining byte values have equal probability.
-        yield [(symbol, 1) for symbol in range(256) if symbol not in excluded]
+        # For history = b"abc", try abc, bc, c, then the empty n_order_context.
+        for order in range(longest_order, -1, -1):
+            if order == 0:
+                n_order_context = b""
+            else:
+                n_order_context = self.history[-order:]
+
+            # If this n_order_context has no statistics, try a shorter n_order_context.
+            if n_order_context not in self.contexts:
+                continue
+
+            counts_table = self.contexts[n_order_context]
+            frequencies = []
+
+            # Sort byte values so the encoder and decoder use the same order.
+            sorted_symbols = sorted(counts_table.keys())
+            for symbol in sorted_symbols:
+                if symbol in excluded_symbols:
+                    continue
+
+                count = counts_table[symbol]
+                frequencies.append((symbol, count))
+
+            # If all candidates are excluded, try a shorter n_order_context.
+            if len(frequencies) == 0:
+                continue
+
+            # PPM-C: ESCAPE counts the distinct bytes that followed this context.
+            # Use the full counts_table, including excluded bytes.
+            escape_count = len(counts_table)
+            frequencies.append((ESCAPE, escape_count))
+
+            # Pause and give this table to the caller. A matching byte ends
+            # the search; an ESCAPE resumes execution below for the next table.
+            yield frequencies
+
+            # After an ESCAPE, none of this n_order_context's bytes can be the target.
+            for symbol in counts_table.keys():
+                excluded_symbols.add(symbol)
+
+        # If every n_order_context fails, use the order -1 model for unseen bytes:
+        # give each remaining byte the same frequency of 1.
+        frequencies = []
+        for symbol in range(256):
+            if symbol in excluded_symbols:
+                continue
+
+            frequencies.append((symbol, 1))
+
+        yield frequencies
 
     def update(self, symbol):
-        # Learn only after encoding/decoding the byte, at every context order.
-        for order in range(len(self.history) + 1):
-            context = self.history[-order:] if order else b""
-            counts = self.contexts.setdefault(context, {})
-            counts[symbol] = counts.get(symbol, 0) + 1
-        if self.max_order:
-            self.history = (self.history + bytes([symbol]))[-self.max_order:]
+        # Update every n_order_context order only after encoding/decoding the byte.
+        # For history = b"ab" and symbol = ord("c"), increment the count of c
+        # in the frequency tables for the empty n_order_context, b, and ab.
+        longest_order = len(self.history)
+        for order in range(longest_order + 1):
+            if order == 0:
+                n_order_context = b""
+            else:
+                n_order_context = self.history[-order:]
+
+            if n_order_context not in self.contexts:
+                self.contexts[n_order_context] = {}
+
+            counts_table = self.contexts[n_order_context]
+
+            if symbol not in counts_table:
+                counts_table[symbol] = 0
+
+            counts_table[symbol] += 1
+
+        # Order 0 needs no history; otherwise keep the last max_order bytes.
+        if self.max_order > 0:
+            current_byte = bytes([symbol])
+            self.history = self.history + current_byte
+
+            if len(self.history) > self.max_order:
+                start_index = len(self.history) - self.max_order
+                self.history = self.history[start_index:]
 
 
 def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
-    # Header: b"PAR1", maximum context order (uint8), original size (uint64).
+    # Header: b"PAR1", maximum n_order_context order (uint8), original size (uint64).
     # All integers are little-endian; the payload is packed MSB first.
     # Models start empty on both sides, so no frequency table is stored.
     output = bytearray(b"PAR1")
@@ -140,4 +212,4 @@ def compress_file(source="austen.txt", destination="./PPM+arithmetic/compressed"
 if __name__ == "__main__":
     compress_file()
     print("Compression complete. Output written to ./PPM+arithmetic/compressed")
-    print("size of compressed file:", os.path.getsize("./PPM+arithmetic/compressed") / (1024 * 1024), "MB")
+    print("size of compressed file:", os.path.getsize("./PPM+arithmetic/compressed") , "bytes")

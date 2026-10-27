@@ -1,4 +1,4 @@
-N=bytes;I=b'';H=len;F=range;import struct as S;L=64;A=1<<L;D=A>>1;E=D>>1;T=A-1;B=4;M=256
+N=bytes;I=b'';H=len;F=range;import struct as S;L=64;A=1<<L;D=A>>1;E=D>>1;T=A-1;B=5;M=256
 class U:
 	def __init__(A,max_order=B):A.max_order=max_order;A.history=I;A.contexts={}
 	def distributions(A):
