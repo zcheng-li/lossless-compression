@@ -5,7 +5,6 @@ https://cotty.16x16.com/compress/peppm.htm (update exclusions).
 """
 
 import os
-import struct
 
 
 STATE_BITS = 64
@@ -16,14 +15,15 @@ MASK = FULL_RANGE - 1
 MAX_ORDER = 5
 ESCAPE = 256
 
-# 5 for 617220 bytes    (617220 + 5300) / 2664245 = 23.3657%
+# update 1:
+# 20:8.6 : 616798 bytes best: (616798 + 5315) / 2664245 = 23.3504%
+# update 2:
+# Compact header + decoder: (616789 + 4910) / 2664245 = 23.3349%
 
 
 
 class PPMModel:
-    def __init__(self, max_order=MAX_ORDER):
-        self.max_order = max_order
-
+    def __init__(self):
         # Recently processed bytes used as n_order_context to predict the next byte.
         self.history = b""
 
@@ -58,19 +58,28 @@ class PPMModel:
                     continue
 
                 count = counts_table[symbol]
-                # Preserve this variant's 2 * count weights (standard method D
-                # uses 2 * count - 1); update exclusion changes only learning.
-                frequencies.append((symbol, 2 * count))
+                # Tuned symbol weight; the decoder must use the same weights.
+                frequencies.append((symbol, 200 * count))
 
             # If all candidates are excluded, try a shorter n_order_context.
             if len(frequencies) == 0:
                 continue
 
-            # Each distinct byte contributes 1 to the ESCAPE weight.
+            # Each distinct byte contributes 86 to the ESCAPE weight.
             # Keep the existing exclusion rule: ESCAPE includes excluded bytes.
             escape_count = len(counts_table)
-            frequencies.append((ESCAPE, escape_count))
-            
+            frequencies.append((ESCAPE, 86 * escape_count))
+            # update 1:
+            # 20:11 : 617965 bytes
+            # 20:10 : 617220 bytes
+            # 20:9.5 : 616975 bytes
+            # 20:9 : 616831 bytes
+            # 20:8.8 : 616805 bytes
+            # 20:8.7 : 616799 bytes
+            # 20:8.6 : 616798 bytes best: (616798 + 5315) / 2664245 = 23.3504%
+            # 20:8.5 : 616802 bytes
+            # 20:8 : 616906 bytes
+
             # Pause and give this table to the caller. A matching byte ends
             # the search; an ESCAPE resumes execution below for the next table.
             yield frequencies
@@ -111,22 +120,15 @@ class PPMModel:
                 break
             counts_table[symbol] = 1
 
-        # Order 0 needs no history; otherwise keep the last max_order bytes.
-        if self.max_order > 0:
-            current_byte = bytes([symbol])
-            self.history = self.history + current_byte
-
-            if len(self.history) > self.max_order:
-                start_index = len(self.history) - self.max_order
-                self.history = self.history[start_index:]
+        # This format always uses order 5.
+        self.history = (self.history + bytes([symbol]))[-MAX_ORDER:]
 
 
-def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
-    # Header: b"PDU1", maximum n_order_context order (uint8), original size (uint64).
-    # All integers are little-endian; the payload is packed MSB first.
+def arithmetic_compress(data: bytes) -> bytes:
+    # Header: original size (uint32, little-endian); order is fixed at 5.
+    # The payload is packed MSB first.
     # Models start empty on both sides, so no frequency table is stored.
-    output = bytearray(b"PDU1")
-    output.extend(struct.pack("<BQ", max_order, len(data)))
+    output = bytearray(len(data).to_bytes(4, "little"))
     if not data:
         return bytes(output)
 
@@ -175,7 +177,7 @@ def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
             low <<= 1
             high = (high << 1) | 1
 
-    model = PPMModel(max_order)
+    model = PPMModel()
     for symbol in data:
         for frequencies in model.distributions():
             total = sum(count for _, count in frequencies)
@@ -198,15 +200,17 @@ def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
     return bytes(output)
 
 
-def compress_file(source="austen.txt", destination="./PPMD+UE+arithmetic/compressed",
-                  max_order=MAX_ORDER):
+def compress_file(source="austen.txt", destination=None):
+    if destination is None:
+        destination = os.path.join(os.path.dirname(__file__), "compressed")
     with open(source, "rb") as fin:
-        compressed = arithmetic_compress(fin.read(), max_order)
+        compressed = arithmetic_compress(fin.read())
     with open(destination, "wb") as fout:
         fout.write(compressed)
 
 
 if __name__ == "__main__":
-    compress_file()
-    print("Compression complete. Output written to ./PPMD+UE+arithmetic/compressed")
-    print("size of compressed file:", os.path.getsize("./PPMD+UE+arithmetic/compressed") , "bytes")
+    output_path = os.path.join(os.path.dirname(__file__), "compressed")
+    compress_file(destination=output_path)
+    print("Compression complete. Output written to", output_path)
+    print("size of compressed file:", os.path.getsize(output_path), "bytes")

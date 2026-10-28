@@ -1,18 +1,14 @@
-"""Standalone decoder for the PPM + update exclusion + arithmetic PDU1 format."""
-
-import struct
+"""Fixed-order-5 FT decoder; header is a 4-byte little-endian original size."""
 
 STATE_BITS = 64
 FULL_RANGE = 1 << STATE_BITS
 HALF = FULL_RANGE >> 1
 QUARTER = HALF >> 1
 MASK = FULL_RANGE - 1
-MAX_ORDER = 5
 ESCAPE = 256
 
 class PPMModel:
-    def __init__(self, max_order=MAX_ORDER):
-        self.max_order = max_order
+    def __init__(self):
         self.history = b""
         self.contexts = {}
 
@@ -21,16 +17,16 @@ class PPMModel:
         excluded = set()
         for order in range(len(self.history), -1, -1):
             context = self.history[-order:] if order else b""
-            counts = self.contexts.get(context, {})
-            frequencies = [(symbol, 2 * count) for symbol, count in sorted(counts.items())
+            counts_table = self.contexts.get(context, {})
+            frequencies = [(symbol, 200 * count) for symbol, count in sorted(counts_table.items())
                            if symbol not in excluded]
             if not frequencies:
                 continue
-            # Preserve the encoder's 2 * count weights; ESCAPE gets one per
+            # Match the encoder's 200 * count weights; ESCAPE gets 86 per
             # distinct symbol, including those removed by exclusion.
-            frequencies.append((ESCAPE, len(counts)))
+            frequencies.append((ESCAPE, 86 * len(counts_table)))
             yield frequencies
-            excluded.update(counts)
+            excluded.update(counts_table)
 
         # Order -1: all remaining byte values have equal probability.
         yield [(symbol, 1) for symbol in range(256) if symbol not in excluded]
@@ -40,21 +36,18 @@ class PPMModel:
         # then exclude every lower order from this update.
         for order in range(len(self.history), -1, -1):
             context = self.history[-order:] if order else b""
-            counts = self.contexts.setdefault(context, {})
-            if symbol in counts:
-                counts[symbol] += 1
+            counts_table = self.contexts.setdefault(context, {})
+            if symbol in counts_table:
+                counts_table[symbol] += 1
                 break
-            counts[symbol] = 1
-        if self.max_order:
-            self.history = (self.history + bytes([symbol]))[-self.max_order:]
+            counts_table[symbol] = 1
+        self.history = (self.history + bytes([symbol]))[-5:]
 
 
 def arithmetic_decompress(data):
-    max_order, original_size = struct.unpack_from("<BQ", data, 4)
-    if original_size == 0:
-        return b""
+    original_size = int.from_bytes(data[:4], "little")
 
-    bit_position = 13 * 8
+    bit_position = 4 * 8
     bit_limit = len(data) * 8
 
     def read_bit():
@@ -103,7 +96,7 @@ def arithmetic_decompress(data):
             value = (value << 1) | read_bit()
         return symbol
 
-    model = PPMModel(max_order)
+    model = PPMModel()
     output = bytearray()
     for _ in range(original_size):
         for frequencies in model.distributions():
@@ -112,14 +105,8 @@ def arithmetic_decompress(data):
                 break
         output.append(symbol)
         model.update(symbol)
-    return bytes(output)
+    return output
 
 
-def decompress_file(source="compressed", destination="out.txt"):
-    with open(source, "rb") as fin:
-        decompressed = arithmetic_decompress(fin.read())
-    with open(destination, "wb") as fout:
-        fout.write(decompressed)
-
-
-decompress_file()
+with open("compressed", "rb") as fin, open("out.txt", "wb") as fout:
+    fout.write(arithmetic_decompress(fin.read()))
