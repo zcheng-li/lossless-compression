@@ -1,4 +1,4 @@
-"""Standalone decoder for the PPM + update exclusion + arithmetic PDU1 format."""
+"""Standalone decoder for PPM + update exclusion + deterministic scaling (PDU2)."""
 
 import struct
 
@@ -8,11 +8,13 @@ HALF = FULL_RANGE >> 1
 QUARTER = HALF >> 1
 MASK = FULL_RANGE - 1
 MAX_ORDER = 5
+DETERMINISTIC_SCALE = 2
 ESCAPE = 256
 
 class PPMModel:
-    def __init__(self, max_order=MAX_ORDER):
+    def __init__(self, max_order=MAX_ORDER, deterministic_scale=DETERMINISTIC_SCALE):
         self.max_order = max_order
+        self.deterministic_scale = deterministic_scale
         self.history = b""
         self.contexts = {}
 
@@ -22,12 +24,14 @@ class PPMModel:
         for order in range(len(self.history), -1, -1):
             context = self.history[-order:] if order else b""
             counts = self.contexts.get(context, {})
-            frequencies = [(symbol, 2 * count) for symbol, count in sorted(counts.items())
+            # Deterministic means one recorded successor before exclusion.
+            scale = self.deterministic_scale if len(counts) == 1 else 1
+            frequencies = [(symbol, 2 * count * scale) for symbol, count in sorted(counts.items())
                            if symbol not in excluded]
             if not frequencies:
                 continue
-            # Preserve the encoder's 2 * count weights; ESCAPE gets one per
-            # distinct symbol, including those removed by exclusion.
+            # Scaling leaves ESCAPE at one per distinct symbol, including
+            # those removed by exclusion.
             frequencies.append((ESCAPE, len(counts)))
             yield frequencies
             excluded.update(counts)
@@ -50,11 +54,11 @@ class PPMModel:
 
 
 def arithmetic_decompress(data):
-    max_order, original_size = struct.unpack_from("<BQ", data, 4)
+    max_order, deterministic_scale, original_size = struct.unpack_from("<BBQ", data, 4)
     if original_size == 0:
         return b""
 
-    bit_position = 13 * 8
+    bit_position = 14 * 8
     bit_limit = len(data) * 8
 
     def read_bit():
@@ -103,7 +107,7 @@ def arithmetic_decompress(data):
             value = (value << 1) | read_bit()
         return symbol
 
-    model = PPMModel(max_order)
+    model = PPMModel(max_order, deterministic_scale)
     output = bytearray()
     for _ in range(original_size):
         for frequencies in model.distributions():

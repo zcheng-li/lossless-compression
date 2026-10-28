@@ -1,7 +1,7 @@
-"""PPM with method-D-style weights, full update exclusion and arithmetic coding.
+"""PPM with method-D-style weights, update exclusion and deterministic scaling.
 
 Model reference: W. J. Teahan, Probability estimation for PPM,
-https://cotty.16x16.com/compress/peppm.htm (update exclusions).
+https://cotty.16x16.com/compress/peppm.htm (update exclusions and deterministic scaling).
 """
 
 import os
@@ -14,15 +14,19 @@ HALF = FULL_RANGE >> 1
 QUARTER = HALF >> 1
 MASK = FULL_RANGE - 1
 MAX_ORDER = 5
+# Use 1 to disable scaling; the factor is stored in the compressed header.
+DETERMINISTIC_SCALE = 2
 ESCAPE = 256
 
-# 5 for 617220 bytes    (617220 + 5337) / 2664245 = 23.3671%
-
-
+# | PPM-D + UE + ari | 617,220 |
+# | 2 | 620,430 |
+# | 3 | 623,660 |
+# | 4 | 626,382 |
 
 class PPMModel:
-    def __init__(self, max_order=MAX_ORDER):
+    def __init__(self, max_order=MAX_ORDER, deterministic_scale=DETERMINISTIC_SCALE):
         self.max_order = max_order
+        self.deterministic_scale = deterministic_scale
 
         # Recently processed bytes used as n_order_context to predict the next byte.
         self.history = b""
@@ -49,6 +53,9 @@ class PPMModel:
                 continue
 
             counts_table = self.contexts[n_order_context]
+            # Test the original table, before exclusion. Scale probabilities
+            # only; learning counts and the ESCAPE weight stay unchanged.
+            scale = self.deterministic_scale if len(counts_table) == 1 else 1
             frequencies = []
 
             # Sort byte values so the encoder and decoder use the same order.
@@ -60,7 +67,7 @@ class PPMModel:
                 count = counts_table[symbol]
                 # Preserve this variant's 2 * count weights (standard method D
                 # uses 2 * count - 1); update exclusion changes only learning.
-                frequencies.append((symbol, 2 * count))
+                frequencies.append((symbol, 2 * count * scale))
 
             # If all candidates are excluded, try a shorter n_order_context.
             if len(frequencies) == 0:
@@ -121,12 +128,15 @@ class PPMModel:
                 self.history = self.history[start_index:]
 
 
-def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
-    # Header: b"PDU1", maximum n_order_context order (uint8), original size (uint64).
+def arithmetic_compress(data: bytes, max_order=MAX_ORDER,
+                        deterministic_scale=DETERMINISTIC_SCALE) -> bytes:
+    if not 1 <= deterministic_scale <= 255:
+        raise ValueError("deterministic_scale must be between 1 and 255")
+    # Header: b"PDU2", maximum order (uint8), scale (uint8), size (uint64).
     # All integers are little-endian; the payload is packed MSB first.
     # Models start empty on both sides, so no frequency table is stored.
-    output = bytearray(b"PDU1")
-    output.extend(struct.pack("<BQ", max_order, len(data)))
+    output = bytearray(b"PDU2")
+    output.extend(struct.pack("<BBQ", max_order, deterministic_scale, len(data)))
     if not data:
         return bytes(output)
 
@@ -175,7 +185,7 @@ def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
             low <<= 1
             high = (high << 1) | 1
 
-    model = PPMModel(max_order)
+    model = PPMModel(max_order, deterministic_scale)
     for symbol in data:
         for frequencies in model.distributions():
             total = sum(count for _, count in frequencies)
@@ -198,15 +208,15 @@ def arithmetic_compress(data: bytes, max_order=MAX_ORDER) -> bytes:
     return bytes(output)
 
 
-def compress_file(source="austen.txt", destination="./PPMD+UE+arithmetic/compressed",
-                  max_order=MAX_ORDER):
+def compress_file(source="austen.txt", destination="./PPMD+UE+UC+arithmetic/compressed",
+                  max_order=MAX_ORDER, deterministic_scale=DETERMINISTIC_SCALE):
     with open(source, "rb") as fin:
-        compressed = arithmetic_compress(fin.read(), max_order)
+        compressed = arithmetic_compress(fin.read(), max_order, deterministic_scale)
     with open(destination, "wb") as fout:
         fout.write(compressed)
 
 
 if __name__ == "__main__":
     compress_file()
-    print("Compression complete. Output written to ./PPMD+UE+arithmetic/compressed")
-    print("size of compressed file:", os.path.getsize("./PPMD+UE+arithmetic/compressed") , "bytes")
+    print("Compression complete. Output written to ./PPMD+UE+UC+arithmetic/compressed")
+    print("size of compressed file:", os.path.getsize("./PPMD+UE+UC+arithmetic/compressed") , "bytes")
