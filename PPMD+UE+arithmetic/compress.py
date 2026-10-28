@@ -70,7 +70,7 @@ class PPMModel:
             # Keep the existing exclusion rule: ESCAPE includes excluded bytes.
             escape_count = len(counts_table)
             frequencies.append((ESCAPE, escape_count))
-
+            
             # Pause and give this table to the caller. A matching byte ends
             # the search; an ESCAPE resumes execution below for the next table.
             yield frequencies
