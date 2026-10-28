@@ -20,6 +20,9 @@ ESCAPE = 256
 # 5 for 623758 bytes    (623758 + 5317) / 2664245 = 23.6118%
 # 6 for 626009 bytes
 
+# update: 2 * count
+# (619582 + 5307) / 2664245 = 23.4546%
+
 
 class PPMModel:
     def __init__(self, max_order=MAX_ORDER):
@@ -61,7 +64,13 @@ class PPMModel:
                 count = counts_table[symbol]
                 # Method D discounts each observed count by 1/2.
                 # Double all weights to keep the arithmetic coder integer-only.
-                frequencies.append((symbol, 2 * count - 1))
+                frequencies.append((symbol, 2 * count))
+                # 2 * count: 619582 bytes
+                # 2 * count - 1: 623758 bytes
+                # 3 * count: 622779 bytes
+                # 3 * count - 1: 621381 bytes
+                # 3 * count - 2: 626804 bytes
+                # 4 * count: 628013 bytes
 
             # If all candidates are excluded, try a shorter n_order_context.
             if len(frequencies) == 0:

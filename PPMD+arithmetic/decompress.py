@@ -22,7 +22,7 @@ class PPMModel:
         for order in range(len(self.history), -1, -1):
             context = self.history[-order:] if order else b""
             counts = self.contexts.get(context, {})
-            frequencies = [(symbol, 2 * count - 1) for symbol, count in sorted(counts.items())
+            frequencies = [(symbol, 2 * count) for symbol, count in sorted(counts.items())
                            if symbol not in excluded]
             if not frequencies:
                 continue

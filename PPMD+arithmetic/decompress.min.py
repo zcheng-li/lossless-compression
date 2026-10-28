@@ -4,7 +4,7 @@ class U:
 	def distributions(A):
 		B=set()
 		for E in F(H(A.history),-1,-1):
-			G=A.history[-E:]if E else I;C=A.contexts.get(G,{});D=[(A,2*C-1)for(A,C)in sorted(C.items())if A not in B]
+			G=A.history[-E:]if E else I;C=A.contexts.get(G,{});D=[(A,2*C)for(A,C)in sorted(C.items())if A not in B]
 			if not D:continue
 			D.append((M,H(C)));yield D;B.update(C)
 		yield[(A,1)for A in F(256)if A not in B]
