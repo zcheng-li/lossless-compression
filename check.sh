@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Pass a method directory as the first argument, or use the default below.
 # Relative method paths are resolved next to this script.
-method_dir="${1:-PPMD+UE+arithmetic+FT}"
+# method_dir="${1:-PPMD+UE+arithmetic+FT}"
+method_dir="${1:-submission}"
 python_cmd="python3.12"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)

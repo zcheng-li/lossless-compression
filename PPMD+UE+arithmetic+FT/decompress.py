@@ -1,5 +1,3 @@
-"""Fixed-order-5 FT decoder; header is a 4-byte little-endian original size."""
-
 STATE_BITS = 64
 FULL_RANGE = 1 << STATE_BITS
 HALF = FULL_RANGE >> 1
